@@ -22,11 +22,6 @@ namespace Fireasy.Data.Entity
         EntityContextInitializeContext InitializeContext { get; }
 
         /// <summary>
-        /// 获取或设置仓储创建时收到的通知。
-        /// </summary>
-        Action<RespositoryCreatedEventArgs> OnRespositoryCreated { get; set; }
-
-        /// <summary>
         /// 返回 <see cref="IProvider"/> 对象。
         /// </summary>
         IProvider Provider { get; }
@@ -58,12 +53,5 @@ namespace Fireasy.Data.Entity
         /// 回滚事务。
         /// </summary>
         void RollbackTransaction();
-
-        /// <summary>
-        /// 尝试创建数据仓储的存储结构。
-        /// </summary>
-        /// <param name="entityType">实体类型。</param>
-        /// <returns></returns>
-        bool TryCreateRepositoryStorage(Type entityType);
     }
 }

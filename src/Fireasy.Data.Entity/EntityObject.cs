@@ -66,17 +66,8 @@ namespace Fireasy.Data.Entity
         /// </summary>
         protected EntityObject()
         {
-            entityType = GetEntityType();
+            entityType = GetType();
             state = EntityState.Attached;
-        }
-
-        /// <summary>
-        /// 获取实体类型。
-        /// </summary>
-        /// <returns></returns>
-        protected virtual Type GetEntityType()
-        {
-            return GetType().GetDefinitionEntityType();
         }
 
         private EntityLzayManager InnerLazyMgr
@@ -299,9 +290,15 @@ namespace Fireasy.Data.Entity
             set { isModifing = value; }
         }
 
-        void IEntity.NotifyModified(string propertyName)
+        void IEntity.NotifyModified(string propertyName, bool modified)
         {
-            InnerEntry.Modify(propertyName);
+            if (!modified)
+            {
+                InnerEntry.Modify(propertyName, false);
+                return;
+            }
+
+            InnerEntry.Modify(propertyName, modified);
 
             if (state == EntityState.Unchanged)
             {

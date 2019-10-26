@@ -375,7 +375,7 @@ namespace Fireasy.Data.Entity.Linq.Translators
 
             var kvpConstructor = typeof(KeyValuePair<,>).MakeGenericType(innerKey.Type, join.Projection.Projector.Type).GetConstructor(new Type[] { innerKey.Type, join.Projection.Projector.Type });
             var constructKVPair = Expression.New(kvpConstructor, innerKey, join.Projection.Projector);
-            Expression newProjection = new ProjectionExpression(join.Projection.Select, constructKVPair);
+            Expression newProjection = new ProjectionExpression(join.Projection.Select, constructKVPair, false);
 
             var kvp = Expression.Parameter(constructKVPair.Type, "kvp");
 
@@ -1696,6 +1696,17 @@ namespace Fireasy.Data.Entity.Linq.Translators
                     break;
                 case "Parse":
                     Write(Syntax.Convert(TranslateString(m.Arguments[0]), m.Method.DeclaringType.GetDbType()));
+                    break;
+                case "Contains":
+                    Write(Syntax.String.Concat("','", TranslateString(m.Arguments[0]), "','"));
+                    Write(" LIKE ");
+                    var exp = m.Arguments[1];
+                    if (exp is ConstantExpression constExp && constExp.Type != typeof(string) && constExp.Value != null)
+                    {
+                        exp = Expression.Constant(constExp.Value.ToString(), typeof(string));
+                    }
+
+                    Write(Syntax.String.Concat("'%,'", TranslateString(exp),  "',%'"));
                     break;
             }
 

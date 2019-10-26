@@ -33,9 +33,7 @@ namespace Fireasy.Windows.Forms
         /// </summary>
         public PopupComboBox()
         {
-            FocusOnOpen = true;
             Resizable = true;
-
         }
 
         [DefaultValue(true)]
@@ -119,10 +117,9 @@ namespace Fireasy.Windows.Forms
                     dropDown.Width = DropDownWidth;
                     dropDown.Height = DropDownHeight;
                     DropDownControl.LostFocus += (o, e) =>
-                        {
-                            isOpened = false;
-                            OnLostFocus(EventArgs.Empty);
-                        };
+                    {
+                        isOpened = false;
+                    };
                     isFirstDrop = false;
                 }
 
@@ -153,14 +150,19 @@ namespace Fireasy.Windows.Forms
                 Items.Add(string.Empty);
             }
 
+            if (Items[0].Equals(text))
+            {
+                return;
+            }
+
             Items[0] = text;
             SelectedIndex = 0;
         }
 
         public void SetItem(string text, object value)
         {
+            SelectedValue = value;
             SetText(text);
-            selectedValue = value;
         }
 
         protected override void OnResize(EventArgs e)
@@ -192,16 +194,12 @@ namespace Fireasy.Windows.Forms
 
         protected override void OnLostFocus(EventArgs e)
         {
-            if (!isOpened)
-            {
-                base.OnLostFocus(e);
-            }
         }
 
         [SecurityPermission(SecurityAction.LinkDemand, Flags = SecurityPermissionFlag.UnmanagedCode)]
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == (NativeMethods.WM_COMMAND + NativeMethods.WM_REFLECT) && 
+            if (m.Msg == (NativeMethods.WM_COMMAND + NativeMethods.WM_REFLECT) &&
                 NativeMethods.HIWORD((int)m.WParam) == NativeMethods.CBN_DROPDOWN)
             {
                 if (isDroped)

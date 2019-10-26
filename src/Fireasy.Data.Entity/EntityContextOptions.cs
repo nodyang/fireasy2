@@ -5,6 +5,7 @@
 //   (c) Copyright Fireasy. All rights reserved.
 // </copyright>
 // -----------------------------------------------------------------------
+using Fireasy.Data.Entity.Initializers;
 using System;
 
 namespace Fireasy.Data.Entity
@@ -19,21 +20,19 @@ namespace Fireasy.Data.Entity
         /// </summary>
         public EntityContextOptions()
         {
+            Initializers = new EntityContextPreInitializerCollection();
+            Initializers.Add<RecompileAssemblyPreInitializer>();
         }
 
         /// <summary>
         /// 初始化 <see cref="EntityContextOptions"/> 类的新实例。
         /// </summary>
-        /// <param name="instanceName">实例名称。</param>
-        public EntityContextOptions(string instanceName)
+        /// <param name="configName">实例名称。</param>
+        public EntityContextOptions(string configName)
+            : this()
         {
-            ConfigName = instanceName;
+            ConfigName = configName;
         }
-
-        /// <summary>
-        /// 获取或设置是否自动创建数据表，或添加新的字段。默认为 false。
-        /// </summary>
-        public bool AutoCreateTables { get; set; }
 
         /// <summary>
         /// 获取或设置是否通知持久化事件。默认为 false。
@@ -56,14 +55,9 @@ namespace Fireasy.Data.Entity
         public Func<EntityContextInitializeContext> ContextFactory { get; set; }
 
         /// <summary>
-        /// 获取或设置仓储创建成功时的通知。
+        /// 获取初始化方法。
         /// </summary>
-        public Action<Type> OnRespositoryCreated { get; set; }
-
-        /// <summary>
-        /// 获取或设置仓储创建失败时的通知。
-        /// </summary>
-        public Action<Type, Exception> OnRespositoryCreateFailed { get; set; }
+        public EntityContextPreInitializerCollection Initializers { get; private set; }
 
         public override bool Equals(object obj)
         {
@@ -73,8 +67,7 @@ namespace Fireasy.Data.Entity
             }
 
             var op = (EntityContextOptions)obj;
-            return AutoCreateTables == op.AutoCreateTables &&
-                NotifyEvents == op.NotifyEvents &&
+            return NotifyEvents == op.NotifyEvents &&
                 ValidateEntity == op.ValidateEntity &&
                 ConfigName == op.ConfigName;
         }

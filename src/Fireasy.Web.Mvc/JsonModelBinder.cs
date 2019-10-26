@@ -1,9 +1,8 @@
-﻿#if NETSTANDARD
+﻿#if NETCOREAPP
 using Fireasy.Common.Logging;
 using Fireasy.Common.Serialization;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using System;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace Fireasy.Web.Mvc

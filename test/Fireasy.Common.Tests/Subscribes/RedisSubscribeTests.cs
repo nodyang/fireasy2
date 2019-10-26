@@ -1,4 +1,5 @@
-﻿using Fireasy.Common.Subscribes;
+﻿using Fireasy.Common.Caching;
+using Fireasy.Common.Subscribes;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Text;
@@ -18,25 +19,27 @@ namespace Fireasy.Common.Tests.Subscribes
         public void Test()
         {
             var subMgr = SubscribeManagerFactory.CreateManager("redis");
+            var cacheMgr = CacheManagerFactory.CreateManager("redis");
 
-            subMgr.AddSubscriber<TestSubject>(s =>
+            subMgr.AddSubscriber<TestSubject>("a", s =>
             {
                 Console.WriteLine("1:--" + s.Key);
             });
             subMgr.AddSubscriber<TestSubject>(s =>
             {
+                //throw new Exception();
                 Console.WriteLine("2:--" + s.Key);
             });
 
             subMgr.Publish(new TestSubject { Key = "fireasy1" });
             subMgr.Publish(new TestSubject { Key = "fireasy2" });
 
-            subMgr.RemoveSubscriber<TestSubject>();
+            //subMgr.RemoveSubscriber<TestSubject>();
 
-            subMgr.Publish(new TestSubject { Key = "new fireasy1" });
+            subMgr.Publish("a", new TestSubject { Key = "new fireasy1" });
             subMgr.Publish(new TestSubject { Key = "new fireasy2" });
 
-            Thread.Sleep(2000);
+            Thread.Sleep(5000);
         }
 
         [TestMethod]
@@ -51,7 +54,7 @@ namespace Fireasy.Common.Tests.Subscribes
             Thread.Sleep(2000);
         }
 
-        [Channel("test11")]
+        [Topic("test11")]
         public class TestSubject
         {
             public string Key { get; set; }

@@ -1,9 +1,11 @@
-﻿using Fireasy.Common.Extensions;
+﻿using Fireasy.Common.Dynamic;
+using Fireasy.Common.Extensions;
 using Fireasy.Common.Mapper;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using static Fireasy.Common.Extensions.GenericExtension;
 
 namespace Fireasy.Common.Tests.Extensions
@@ -158,6 +160,16 @@ namespace Fireasy.Common.Tests.Extensions
             Assert.AreEqual("fireasy", obj.Name);
             Assert.AreEqual("fireasy", dic["Name"]);
         }
+
+        [TestMethod]
+        public void TestFromDynamic()
+        {
+            dynamic d = new DynamicExpandoObject();
+            d.Name = "fireasy";
+
+            var obj = (Data1)GenericExtension.To<Data1>(d);
+            Assert.AreEqual("fireasy", obj.Name);
+        }
         #endregion
 
         #region String
@@ -174,6 +186,44 @@ namespace Fireasy.Common.Tests.Extensions
             Assert.AreEqual(10, "放开那女孩".GetAnsiLength());
             Assert.AreEqual(20, "放开那女孩，good luck".GetAnsiLength());
             Assert.AreEqual(5, "放开那女孩".Length);
+        }
+
+        [TestMethod]
+        public void TestGeLines()
+        {
+            var lines = @"中国
+人".GetLines();
+            Assert.AreEqual(2, lines);
+        }
+
+        [TestMethod]
+        public void TestIsChinese()
+        {
+            Assert.IsTrue('中'.IsChinese());
+            Assert.IsFalse('A'.IsChinese());
+        }
+
+        [TestMethod]
+        public void TestGetAsciiCode()
+        {
+            Assert.AreEqual(-6984, '中'.GetAsciiCode());
+            Assert.AreEqual(65, 'A'.GetAsciiCode());
+        }
+
+
+        [TestMethod]
+        public void TestToHex()
+        {
+            var bytes = Encoding.UTF8.GetBytes("帆易动力");
+            Assert.AreEqual("E5B886E69893E58AA8E58A9B", bytes.ToHex());
+        }
+
+        [TestMethod]
+        public void TestFromHex()
+        {
+            var hex = "E5B886E69893E58AA8E58A9B";
+            var bytes = hex.FromHex();
+            Assert.AreEqual("帆易动力", Encoding.UTF8.GetString(bytes));
         }
         #endregion
 
@@ -203,5 +253,13 @@ namespace Fireasy.Common.Tests.Extensions
             Assert.AreEqual(50, data.Median()); //中位数
         }
         #endregion
+
+        [TestMethod]
+        public void TestDate()
+        {
+            var date = new DateTime(2009, 12, 22, 13, 22, 34);
+            Console.WriteLine(date.ToTimeStamp());
+            Console.WriteLine(1261459354L.ToDateTime());
+        }
     }
 }

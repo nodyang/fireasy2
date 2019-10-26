@@ -5,10 +5,12 @@
 //   (c) Copyright Fireasy. All rights reserved.
 // </copyright>
 // -----------------------------------------------------------------------
+using Fireasy.Common;
 using Fireasy.Common.ComponentModel;
 using Fireasy.Common.Logging;
+using System;
 using System.Linq;
-#if !NETSTANDARD
+#if !NETCOREAPP
 using System.Web.Mvc;
 #else
 using Microsoft.AspNetCore.Mvc;
@@ -23,7 +25,7 @@ namespace Fireasy.Web.Mvc
     /// 控制器方法执行发生异常时，记录日志并返回友好的提示信息。
     /// </summary>
     public class HandleErrorAttribute :
-#if !NETSTANDARD
+#if !NETCOREAPP
         System.Web.Mvc.HandleErrorAttribute
 #else
         ExceptionFilterAttribute
@@ -35,7 +37,7 @@ namespace Fireasy.Web.Mvc
         /// <param name="filterContext"></param>
         public override void OnException(ExceptionContext filterContext)
         {
-#if !NETSTANDARD
+#if !NETCOREAPP
             var descriptor = ActionContext.Current != null ? ActionContext.Current.ActionDescriptor as ReflectedActionDescriptor : null;
             if (descriptor != null && typeof(JsonResult).IsAssignableFrom(descriptor.MethodInfo.ReturnType))
 #else
@@ -56,7 +58,7 @@ namespace Fireasy.Web.Mvc
         protected virtual void HandleExceptionForJson(ExceptionContext filterContext)
         {
             //如果是通知类的异常，直接输出提示
-            var notifyExp = filterContext.Exception as Fireasy.Common.ClientNotificationException;
+            var notifyExp = GetNotificationException(filterContext.Exception);
             if (notifyExp != null)
             {
                 filterContext.Result = new JsonResultWrapper(Result.Fail(notifyExp.Message));
@@ -77,7 +79,7 @@ namespace Fireasy.Web.Mvc
         protected virtual void LogException(ExceptionContext filterContext)
         {
             //记录日志
-#if !NETSTANDARD
+#if !NETCOREAPP
             var logger = LoggerFactory.CreateLogger();
 #else
             var logger = filterContext.HttpContext.RequestServices.GetService<ILogger>();
@@ -100,7 +102,7 @@ namespace Fireasy.Web.Mvc
         protected virtual ActionResult GetHandledResult(ExceptionContext filterContext)
         {
             EmptyArrayResultAttribute attr = null;
-#if !NETSTANDARD
+#if !NETCOREAPP
             if (ActionContext.Current != null)
             {
                 attr = ActionContext.Current.ActionDescriptor
@@ -132,6 +134,26 @@ namespace Fireasy.Web.Mvc
             }
 
             return new JsonResultWrapper(Result.Fail("发生错误，请查阅相关日志或联系管理员。"));
+        }
+
+        /// <summary>
+        /// 查找 <see cref="ClientNotificationException"/> 异常。
+        /// </summary>
+        /// <param name="exp"></param>
+        /// <returns></returns>
+        private ClientNotificationException GetNotificationException(Exception exp)
+        {
+            while (exp != null)
+            {
+                if (exp is ClientNotificationException notifyExp)
+                {
+                    return notifyExp;
+                }
+
+                exp = exp.InnerException;
+            }
+
+            return null;
         }
     }
 }

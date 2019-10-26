@@ -1139,6 +1139,27 @@ namespace Fireasy.Data.Entity
         }
 
         /// <summary>
+        /// 获取指定 <see cref="PropertyValue"/> 真实的值。
+        /// </summary>
+        /// <param name="value"></param>
+        /// <returns></returns>
+        public static TValue GetValue<TValue>(PropertyValue value)
+        {
+            if (IsEmpty(value))
+            {
+                return default;
+            }
+
+            var val = value.GetValue();
+            if (val != null && val is TValue)
+            {
+                return (TValue)val;
+            }
+
+            return default;
+        }
+
+        /// <summary>
         /// 判断指定的类型是否受 <see cref="PropertyValue"/> 类型支持。这些类型主要是值类型。
         /// </summary>
         /// <param name="type">要判断的类型。</param>
@@ -1348,6 +1369,36 @@ namespace Fireasy.Data.Entity
         /// <returns></returns>
         public static bool IsEmpty(PropertyValue value)
         {
+            return value == Empty || value.StorageType == StorageType.Empty || value.GetValue() == null;
+        }
+
+        /// <summary>
+        /// 判断是否为空或为缺省值。
+        /// </summary>
+        /// <param name="value"></param>
+        /// <returns></returns>
+        public static bool IsEmptyOrDefault(PropertyValue value)
+        {
+            switch (value.StorageType)
+            {
+                case StorageType.Int16:
+                    return value.Int16 == 0 || value.Int16 == null;
+                case StorageType.Int32:
+                    return value.Int32 == 0 || value.Int32 == null;
+                case StorageType.Int64:
+                    return value.Int64 == 0 || value.Int64 == null;
+                case StorageType.Decimal:
+                    return value.Decimal == 0 || value.Decimal == null;
+                case StorageType.Single:
+                    return value.Single == 0 || value.Single == null;
+                case StorageType.Double:
+                    return value.Double == 0 || value.Double == null;
+                case StorageType.Boolean:
+                    return value.Boolean == false || value.Boolean == null;
+                case StorageType.String:
+                    return string.IsNullOrEmpty(value.String);
+            }
+
             return value == Empty || value.StorageType == StorageType.Empty || value.GetValue() == null;
         }
         #endregion

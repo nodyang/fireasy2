@@ -28,12 +28,23 @@ namespace Fireasy.Data.Entity
         /// <returns></returns>
         public static Type GetType(Type type)
         {
-            if (cache.TryGetValue(type.Assembly.FullName, out Assembly assembly))
+            if (!type.IsEntityType())
             {
-                return assembly.GetType(type.Name);
+                throw new ArgumentException();
             }
 
-            return type;
+            if (!type.IsNotCompiled())
+            {
+                return type;
+            }
+
+            var assembly = CompileAll(type.Assembly, null);
+            if (assembly == null)
+            {
+                return type;
+            }
+
+            return assembly.GetType(type.Name, false);
         }
 
         public static Assembly CompileAll(Assembly assembly, IInjectionProvider injection)

@@ -5,7 +5,6 @@
 //   (c) Copyright Fireasy. All rights reserved.
 // </copyright>
 // -----------------------------------------------------------------------
-#if !NET35
 using System;
 using System.Collections.Concurrent;
 using System.Threading;
@@ -38,7 +37,7 @@ namespace Fireasy.Common
             var entry = new ActionEntry(action, tryTimes);
             queue.Enqueue(entry);
 
-            if (thread.ThreadState != ThreadState.Running)
+            if (thread.ThreadState != ThreadState.Background)
             {
                 thread.Start();
             }
@@ -112,4 +111,3 @@ namespace Fireasy.Common
         }
     }
 }
-#endif

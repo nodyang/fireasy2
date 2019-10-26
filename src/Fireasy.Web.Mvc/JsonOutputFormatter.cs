@@ -5,7 +5,7 @@
 //   (c) Copyright Fireasy. All rights reserved.
 // </copyright>
 // -----------------------------------------------------------------------
-#if NETSTANDARD
+#if NETCOREAPP
 using Fireasy.Common.Serialization;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.Extensions.DependencyInjection;
@@ -49,28 +49,33 @@ namespace Fireasy.Web.Mvc
         {
             var response = context.HttpContext.Response;
 
-            using (var writer = context.WriterFactory(response.Body, selectedEncoding))
+            JsonSerializeOption option = null;
+            if (context.Object is JsonResultWrapper wrapper)
             {
-                JsonSerializeOption option = null;
-                if (context.Object is JsonResultWrapper wrapper)
-                {
-                    option = wrapper.Option;
-                }
-
+                option = wrapper.Option;
+            }
+            else
+            {
                 var hosting = context.HttpContext.RequestServices.GetService<JsonSerializeOptionHosting>();
                 if (hosting != null)
                 {
                     option = hosting.Option;
                 }
-
-                option = option ?? mvcOptions.JsonSerializeOption;
-                var serializer = new JsonSerializer(option);
-
-                using (var jsonWriter = new JsonWriter(writer))
-                {
-                    serializer.Serialize(context.Object, jsonWriter);
-                }
             }
+
+            if (option == null)
+            {
+                option = mvcOptions.JsonSerializeOption;
+            }
+            else
+            {
+                option.Reference(mvcOptions.JsonSerializeOption);
+            }
+
+            var serializer = new JsonSerializer(option);
+
+            var content = serializer.Serialize(context.Object);
+            response.Body.WriteAsync(selectedEncoding.GetBytes(content));
 
             return Task.CompletedTask;
         }

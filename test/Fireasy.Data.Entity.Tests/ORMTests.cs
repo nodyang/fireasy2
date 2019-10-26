@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq;
 using Fireasy.Data.Entity.Linq;
+using Fireasy.Data.Entity.Properties;
 
 namespace Fireasy.Data.Entity.Tests
 {
@@ -62,12 +63,16 @@ namespace Fireasy.Data.Entity.Tests
         {
             protected override void OnConfiguring(EntityContextOptionsBuilder builder)
             {
+                var map = new PropertyMapInfo { IsPrimaryKey = true, DataType = System.Data.DbType.Boolean, Description = "dd" };
+                var p = new GeneralProperty { Info = map };
+                PropertyUnity.RegisterProperty(typeof(SysUser), p);
                 builder.UseSqlServer(connstr);
             }
 
             public EntityRepository<SysUser> Users { get; set; }
         }
 
+#if NETSTANDARD2
         public class EfDbContext : Microsoft.EntityFrameworkCore.DbContext
         {
             protected override void OnConfiguring(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder optionsBuilder)
@@ -77,6 +82,7 @@ namespace Fireasy.Data.Entity.Tests
 
             public Microsoft.EntityFrameworkCore.DbSet<SysUser> Users { get; set; }
         }
+#endif
 
         public ORMTests()
         {
@@ -115,6 +121,7 @@ namespace Fireasy.Data.Entity.Tests
             }
         }
 
+#if NETSTANDARD
         [TestMethod]
         public void TestQueryEFAll()
         {
@@ -131,5 +138,6 @@ namespace Fireasy.Data.Entity.Tests
                 Console.WriteLine(t);
             }
         }
+#endif
     }
 }

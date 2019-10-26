@@ -5,6 +5,7 @@ using Fireasy.Data.Entity.Dynamic;
 using Fireasy.Data.Entity.Linq;
 using Fireasy.Data.Entity.Linq.Expressions;
 using Fireasy.Data.Entity.Linq.Translators;
+using Fireasy.Data.Entity.Metadata;
 using Fireasy.Data.Entity.Properties;
 using Fireasy.Data.Entity.Tests.Models;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -58,7 +59,7 @@ namespace Fireasy.Data.Entity.Tests
         [TestMethod]
         public void TestModified_New()
         {
-            var product = Products.New();
+            var product = Products.New(true);
             product.ProductName = "fireasy";
 
             Assert.IsTrue(product.IsModified("ProductName"));
@@ -91,12 +92,29 @@ namespace Fireasy.Data.Entity.Tests
             }
         }
 
+        [EntityMapping("dd")]
+        public class Customers1 : Customers
+        {
+            /// <summary>
+            /// 获取或设置。
+            /// </summary>
+
+            [PropertyMapping(ColumnName = "PostCode", Description = "", Length = 6, IsNullable = false)]
+            public virtual string PostCode { get; set; }
+        }
+
         [TestMethod]
         public void TestGetValue()
         {
-            var customer = new Customers { ContactName = "fireasy" };
-            var value = customer.GetValue(PropertyUnity.GetProperty(typeof(Customers), "ContactName"));
+            var customer = new Customers { PostalCode = "fireasy" };
+            var value = customer.GetValue(PropertyUnity.GetProperty((customer as IEntity).EntityType, "PostalCode"));
             Assert.AreEqual(value, "fireasy");
+
+            EntityMetadataUnity.GetEntityMetadata(typeof(Customers));
+            EntityMetadataUnity.GetEntityMetadata(typeof(Customers1));
+
+            Console.WriteLine(PropertyUnity.GetProperties(typeof(Customers)).ToList().Count());
+            Console.WriteLine(PropertyUnity.GetProperties(typeof(Customers1)).ToList().Count());
 
             var order = Orders.Wrap(() => new Orders { CustomerID = "11" });
             value = order.GetValue(PropertyUnity.GetProperty(typeof(Orders), "CustomerID"));
@@ -156,8 +174,13 @@ namespace Fireasy.Data.Entity.Tests
         public void TestDynamic()
         {
             var builder = new EntityTypeBuilder("test");
-            builder.Properties.Add(new GeneralProperty() { Name = "aa", Type = typeof(string) });
+            builder.Properties.Add(new GeneralProperty() { Name = "aa", Type = typeof(string), Info = new PropertyMapInfo { FieldName = "aa", IsPrimaryKey = true, DefaultValue = PropertyValue.NewValue(33, typeof(int)), GenerateType = IdentityGenerateType.AutoIncrement } });
+            builder.Properties.Add(new GeneralProperty() { Name = "bb", Type = typeof(string), Info = new PropertyMapInfo { FieldName = "bb", IsNullable = true } });
+            builder.Properties.Add(new GeneralProperty() { Name = "cc", Type = typeof(int), Info = new PropertyMapInfo { FieldName = "cc", Scale = 2 } });
+            builder.Properties.Add(new EntityProperty() { Name = "dd", Type = typeof(Products) });
             var a = builder.Create();
+
+            var pp = PropertyUnity.GetPrimaryProperties(a).FirstOrDefault(s => s.Info.GenerateType == IdentityGenerateType.AutoIncrement);
         }
     }
 

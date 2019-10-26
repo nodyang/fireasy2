@@ -38,12 +38,30 @@ namespace Fireasy.Common.Serialization
         public bool IgnoreNull { get; set; } = true;
 
         /// <summary>
-        /// 获取或设置输出的风格。
+        /// 获取或设置输出节点的风格。
         /// </summary>
-        public OutputStyle OutputStyle { get; set; }
+        public XmlNodeStyle NodeStyle { get; set; }
+
+        /// <summary>
+        /// 引用另一个对象的设置属性。
+        /// </summary>
+        /// <param name="other"></param>
+        public override void Reference(SerializeOption other)
+        {
+            base.Reference(other);
+
+            if (other is XmlSerializeOption xoption)
+            {
+                CData = xoption.CData;
+                Declaration = xoption.Declaration;
+                StartElement = xoption.StartElement;
+                IgnoreNull = xoption.IgnoreNull;
+                NodeStyle = xoption.NodeStyle;
+            }
+        }
     }
 
-    public enum OutputStyle
+    public enum XmlNodeStyle
     {
         Element,
         Attribute

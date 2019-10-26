@@ -8,6 +8,10 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Fireasy.Common.Caching
 {
@@ -86,6 +90,19 @@ namespace Fireasy.Common.Caching
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// 设置缓存的有效时间。
+        /// </summary>
+        /// <param name="cacheKey">用于引用对象的缓存键。</param>
+        /// <param name="expiration">判断对象过期的对象。</param>
+        public void SetExpirationTime(string cacheKey, Func<ICacheItemExpiration> expiration)
+        {
+            if (cacheDictionary.TryGetValue(cacheKey, out CacheItem entry))
+            {
+                entry.Expiration = expiration == null ? NeverExpired.Instance : expiration();
+            }
         }
 
         /// <summary>
@@ -240,10 +257,16 @@ namespace Fireasy.Common.Caching
         /// <summary>
         /// 获取所有的 key。
         /// </summary>
+        /// <param name="pattern"></param>
         /// <returns></returns>
-        public IEnumerable<string> GetKeys()
+        public IEnumerable<string> GetKeys(string pattern)
         {
-            return cacheDictionary.Keys;
+            if (string.IsNullOrEmpty(pattern))
+            {
+                return cacheDictionary.Keys;
+            }
+
+            return cacheDictionary.Keys.Where(s => Regex.IsMatch(s, pattern));
         }
 
         /// <summary>
@@ -294,6 +317,66 @@ namespace Fireasy.Common.Caching
                     }
                 }
             }
+        }
+
+        Task<T> ICacheManager.AddAsync<T>(string cacheKey, T value, TimeSpan? expire, CacheItemRemovedCallback removeCallback, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Add(cacheKey, value, expire, removeCallback));
+        }
+
+        Task<T> ICacheManager.AddAsync<T>(string cacheKey, T value, ICacheItemExpiration expiration, CacheItemRemovedCallback removeCallback, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Add(cacheKey, value, expiration, removeCallback));
+        }
+
+        Task<bool> ICacheManager.ContainsAsync(string cacheKey, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Contains(cacheKey));
+        }
+
+        Task<object> ICacheManager.GetAsync(string cacheKey, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Get(cacheKey));
+        }
+
+        Task<T> ICacheManager.GetAsync<T>(string cacheKey, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(Get<T>(cacheKey));
+        }
+
+        Task<TimeSpan?> ICacheManager.GetExpirationTimeAsync(string cacheKey, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(GetExpirationTime(cacheKey));
+        }
+
+        Task ICacheManager.SetExpirationTimeAsync(string cacheKey, Func<ICacheItemExpiration> expiration, CancellationToken cancellationToken)
+        {
+            return Task.Run(() => SetExpirationTime(cacheKey, expiration));
+        }
+
+        Task<T> ICacheManager.TryGetAsync<T>(string cacheKey, Func<T> factory, Func<ICacheItemExpiration> expiration, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(TryGet(cacheKey, factory, expiration));
+        }
+
+        Task<object> ICacheManager.TryGetAsync(Type dataType, string cacheKey, Func<object> factory, Func<ICacheItemExpiration> expiration, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(TryGet(dataType, cacheKey, factory, expiration));
+        }
+
+        Task<IEnumerable<string>> ICacheManager.GetKeysAsync(string pattern, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(GetKeys(pattern));
+        }
+
+        Task ICacheManager.RemoveAsync(string cacheKey, CancellationToken cancellationToken)
+        {
+            return Task.Run(() => Remove(cacheKey));
+        }
+
+        Task ICacheManager.ClearAsync(CancellationToken cancellationToken)
+        {
+            return Task.Run(Clear);
         }
     }
 }

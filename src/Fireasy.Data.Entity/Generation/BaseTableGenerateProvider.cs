@@ -30,18 +30,22 @@ namespace Fireasy.Data.Entity.Generation
         /// </summary>
         /// <param name="database">提供给当前插件的 <see cref="IDatabase"/> 对象。</param>
         /// <param name="metadata">实体元数据。</param>
-        public void TryCreate(IDatabase database, EntityMetadata metadata)
+        /// <param name="tableName">数据表名称。</param>
+        public bool TryCreate(IDatabase database, EntityMetadata metadata, string tableName)
         {
             var syntax = database.Provider.GetService<ISyntaxProvider>();
             if (syntax != null)
             {
-                var properties = PropertyUnity.GetPersistentProperties(metadata.EntityType).ToArray();
-                if (properties.Length > 0)
+                var properties = PropertyUnity.GetPersistentProperties(metadata.EntityType).ToList();
+                if (properties.Count > 0)
                 {
-                    var commands = BuildCreateTableCommands(syntax, metadata, properties);
+                    var commands = BuildCreateTableCommands(syntax, tableName, properties);
                     BatchExecute(database, commands);
+                    return true;
                 }
             }
+
+            return false;
         }
 
         /// <summary>
@@ -49,47 +53,50 @@ namespace Fireasy.Data.Entity.Generation
         /// </summary>
         /// <param name="database">提供给当前插件的 <see cref="IDatabase"/> 对象。</param>
         /// <param name="metadata">实体元数据。</param>
-        public void TryAddFields(IDatabase database, EntityMetadata metadata)
+        /// <param name="tableName">数据表名称。</param>
+        public IList<IProperty> TryAddFields(IDatabase database, EntityMetadata metadata, string tableName)
         {
             var schema = database.Provider.GetService<ISchemaProvider>();
             var syntax = database.Provider.GetService<ISyntaxProvider>();
             if (schema == null || syntax == null)
             {
-                return;
+                return null;
             }
 
             //查询目前数据表中的所有字段
-            var columns = schema.GetSchemas<Column>(database, s => s.TableName == metadata.TableName).Select(s => s.Name).ToArray();
+            var columns = schema.GetSchemas<Column>(database, s => s.TableName == tableName).Select(s => s.Name).ToArray();
             
             //筛选出新的字段
             var properties = PropertyUnity.GetPersistentProperties(metadata.EntityType)
-                .Where(s => !columns.Contains(s.Info.FieldName, StringComparer.CurrentCultureIgnoreCase)).ToArray();
+                .Where(s => !columns.Contains(s.Info.FieldName, StringComparer.CurrentCultureIgnoreCase)).ToList();
 
-            if (properties.Length != 0)
+            if (properties.Count != 0)
             {
-                var commands = BuildAddFieldCommands(syntax, metadata, properties);
+                var commands = BuildAddFieldCommands(syntax, tableName, properties);
                 BatchExecute(database, commands);
             }
+
+            return properties;
         }
 
         /// <summary>
         /// 判断实体类型对应的数据表是否已经存在。
         /// </summary>
         /// <param name="database">提供给当前插件的 <see cref="IDatabase"/> 对象。</param>
-        /// <param name="metadata">实体元数据。</param>
+        /// <param name="tableName">数据表名称。</param>
         /// <returns></returns>
-        public bool IsExists(IDatabase database, EntityMetadata metadata)
+        public bool IsExists(IDatabase database, string tableName)
         {
             var syntax = database.Provider.GetService<ISyntaxProvider>();
-            if (metadata != null && syntax != null)
+            if (!string.IsNullOrEmpty(tableName) && syntax != null)
             {
                 //判断表是否存在
-                SqlCommand sql = syntax.ExistsTable(metadata.TableName);
+                SqlCommand sql = syntax.ExistsTable(tableName);
                 using (var reader = database.ExecuteReader(sql))
                 {
                     if (reader.Read())
                     {
-                        return reader.GetInt32(0) > 0;
+                        return IsExistsTable(reader);
                     }
                 }
             }
@@ -103,9 +110,14 @@ namespace Fireasy.Data.Entity.Generation
         /// <param name="syntax"></param>
         /// <param name="metadata"></param>
         /// <returns></returns>
-        protected abstract SqlCommand[] BuildCreateTableCommands(ISyntaxProvider syntax, EntityMetadata metadata, IProperty[] properties);
+        protected abstract SqlCommand[] BuildCreateTableCommands(ISyntaxProvider syntax, string tableName, IList<IProperty> properties);
 
-        protected abstract SqlCommand[] BuildAddFieldCommands(ISyntaxProvider syntax, EntityMetadata metadata, IProperty[] properties);
+        protected abstract SqlCommand[] BuildAddFieldCommands(ISyntaxProvider syntax, string tableName, IList<IProperty> properties);
+
+        protected virtual bool IsExistsTable(IDataReader reader)
+        {
+            return reader.GetInt32(0) > 0;
+        }
 
         protected string Quote(ISyntaxProvider syntax, string name)
         {
@@ -166,7 +178,7 @@ namespace Fireasy.Data.Entity.Generation
                 }
                 else if (property.Type.IsEnum)
                 {
-                    builder.AppendFormat(" default {0}", (int)property.Info.DefaultValue);
+                    builder.AppendFormat(" default {0}", (int)property.Info.DefaultValue.GetValue());
                 }
                 else if (property.Type == typeof(bool) || property.Type == typeof(bool?))
                 {

@@ -44,11 +44,19 @@ namespace Fireasy.Data.Entity
             var options = context.Options;
 
             Func<IDatabase> factory = null;
-            if (databaseFactory != null)
+            if (DatabaseScope.Current != null)
+            {
+                factory = () => DatabaseScope.Current.Database;
+            }
+            else if (databaseFactory != null)
             {
                 factory = () => databaseFactory(context.Provider, context.ConnectionString);
             }
-            else if (options != null && !string.IsNullOrEmpty(options.ConfigName))
+            else if (context.Provider != null && context.ConnectionString != null)
+            {
+                factory = () => new Database(context.ConnectionString, context.Provider);
+            }
+            else if (options != null)
             {
                 factory = () => DatabaseFactory.CreateDatabase(options.ConfigName);
             }
@@ -81,7 +89,7 @@ namespace Fireasy.Data.Entity
                 if (projection.Type != expression.Type)
                 {
                     var fnAgg = QueryUtility.GetAggregator(expression.Type, projection.Type);
-                    projection = new ProjectionExpression(projection.Select, projection.Projector, fnAgg);
+                    projection = new ProjectionExpression(projection.Select, projection.Projector, fnAgg, projection.IsAsync);
                 }
 
                 return projection;
@@ -137,7 +145,7 @@ namespace Fireasy.Data.Entity
         public void Apply<TEntity>(Expression<Func<IEnumerable<TEntity>, IEnumerable<TEntity>>> fnApply) where TEntity : IEntity
         {
             Guard.ArgumentNull(fnApply, nameof(fnApply));
-            Guard.Argument(fnApply.Parameters.Count != 1, nameof(fnApply));
+            Guard.Argument(fnApply.Parameters.Count == 1, nameof(fnApply));
 
             AddOperation(fnApply.Parameters[0].Type.GetEnumerableElementType(), fnApply);
         }
@@ -145,7 +153,7 @@ namespace Fireasy.Data.Entity
         public void Apply(Type entityType, LambdaExpression fnApply)
         {
             Guard.ArgumentNull(fnApply, nameof(fnApply));
-            Guard.Argument(fnApply.Parameters.Count != 1, nameof(fnApply));
+            Guard.Argument(fnApply.Parameters.Count == 1, nameof(fnApply));
 
             AddOperation(entityType, fnApply);
         }
@@ -159,16 +167,6 @@ namespace Fireasy.Data.Entity
             }
 
             memberOps.Add(operation);
-        }
-
-        public override bool TryCreateRepositoryStorage(Type entityType)
-        {
-            if (InitializeContext.Options.AutoCreateTables)
-            {
-                return RespositoryCreator.TryCreate(this, entityType);
-            }
-
-            return false;
         }
 
         public override void Dispose()

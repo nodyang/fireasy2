@@ -31,5 +31,20 @@ namespace Fireasy.Common.Serialization
         /// 获取或设置是否忽略为 null 的值。默认为 true。
         /// </summary>
         public bool IgnoreNull { get; set; } = true;
+
+        /// <summary>
+        /// 引用另一个对象的设置属性。
+        /// </summary>
+        /// <param name="other"></param>
+        public override void Reference(SerializeOption other)
+        {
+            base.Reference(other);
+
+            if (other is JsonSerializeOption joption)
+            {
+                Format = joption.Format;
+                IgnoreNull = joption.IgnoreNull;
+            }
+        }
     }
 }

@@ -965,6 +965,7 @@ namespace Fireasy.Windows.Forms
 
             if (!editor.IsEditing)
             {
+                EndEdit();
                 RedrawSelectedItems();
             }
         }
@@ -1137,6 +1138,17 @@ namespace Fireasy.Windows.Forms
                     group.Items.AddRange(kvp.Value);
                 }
             }
+        }
+
+        /// <summary>
+        /// 对集合进行排序。
+        /// </summary>
+        /// <param name="column"></param>
+        /// <param name="order"></param>
+        public void Sort(TreeListColumn column, SortOrder order)
+        {
+            Items.Sort(++sortVersion, column, order);
+            UpdateItems();
         }
         #endregion
 

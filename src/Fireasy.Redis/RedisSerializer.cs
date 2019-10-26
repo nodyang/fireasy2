@@ -1,4 +1,11 @@
-﻿using Fireasy.Common.Serialization;
+﻿// -----------------------------------------------------------------------
+// <copyright company="Fireasy"
+//      email="faib920@126.com"
+//      qq="55570729">
+//   (c) Copyright Fireasy. All rights reserved.
+// </copyright>
+// -----------------------------------------------------------------------
+using Fireasy.Common.Serialization;
 using System;
 
 namespace Fireasy.Redis
@@ -17,6 +24,7 @@ namespace Fireasy.Redis
         public virtual string Serialize<T>(T obj)
         {
             var option = new JsonSerializeOption();
+            option.IgnoreNull = false;
             option.Converters.Add(new FullDateTimeJsonConverter());
             var serializer = new JsonSerializer(option);
             return serializer.Serialize(obj);

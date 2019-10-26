@@ -5,12 +5,13 @@
 //   (c) Copyright Fireasy. All rights reserved.
 // </copyright>
 // -----------------------------------------------------------------------
+using Fireasy.Common.Threading;
 using System;
 using System.IO;
+using System.Reflection;
 using System.Text;
-#if NET35
-using Fireasy.Common.Extensions;
-#endif
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Fireasy.Common.Logging
 {
@@ -21,6 +22,7 @@ namespace Fireasy.Common.Logging
     {
         private static readonly string logFilePath;
         private readonly ReadWriteLocker locker = new ReadWriteLocker();
+        private readonly AsyncLocker asyncLocker = new AsyncLocker();
 
         /// <summary>
         /// 获取 <see cref="DefaultLogger"/> 的静态实例。
@@ -49,6 +51,19 @@ namespace Fireasy.Common.Logging
         }
 
         /// <summary>
+        /// 异步的，记录错误信息到日志。
+        /// </summary>
+        /// <param name="message">要记录的信息。</param>
+        /// <param name="exception">异常对象。</param>
+        public async Task ErrorAsync(object message, Exception exception = null, CancellationToken cancellationToken = default)
+        {
+            if (LogEnvironment.IsConfigured(LogLevel.Error))
+            {
+                await WriteAsync("error", message, exception, cancellationToken);
+            }
+        }
+
+        /// <summary>
         /// 记录一般的信息到日志。
         /// </summary>
         /// <param name="message">要记录的信息。</param>
@@ -58,6 +73,19 @@ namespace Fireasy.Common.Logging
             if (LogEnvironment.IsConfigured(LogLevel.Info))
             {
                 Write("info", message, exception);
+            }
+        }
+
+        /// <summary>
+        /// 异步的，记录一般的信息到日志。
+        /// </summary>
+        /// <param name="message">要记录的信息。</param>
+        /// <param name="exception">异常对象。</param>
+        public async Task InfoAsync(object message, Exception exception = null, CancellationToken cancellationToken = default)
+        {
+            if (LogEnvironment.IsConfigured(LogLevel.Info))
+            {
+                await WriteAsync("info", message, exception, cancellationToken);
             }
         }
 
@@ -75,6 +103,19 @@ namespace Fireasy.Common.Logging
         }
 
         /// <summary>
+        /// 异步的，记录警告信息到日志。
+        /// </summary>
+        /// <param name="message">要记录的信息。</param>
+        /// <param name="exception">异常对象。</param>
+        public async Task WarnAsync(object message, Exception exception = null, CancellationToken cancellationToken = default)
+        {
+            if (LogEnvironment.IsConfigured(LogLevel.Warn))
+            {
+                await WriteAsync("warn", message, exception, cancellationToken);
+            }
+        }
+
+        /// <summary>
         /// 记录调试信息到日志。
         /// </summary>
         /// <param name="message">要记录的信息。</param>
@@ -88,6 +129,19 @@ namespace Fireasy.Common.Logging
         }
 
         /// <summary>
+        /// 异步的，记录调试信息到日志。
+        /// </summary>
+        /// <param name="message">要记录的信息。</param>
+        /// <param name="exception">异常对象。</param>
+        public async Task DebugAsync(object message, Exception exception = null, CancellationToken cancellationToken = default)
+        {
+            if (LogEnvironment.IsConfigured(LogLevel.Debug))
+            {
+                await WriteAsync("debug", message, exception, cancellationToken);
+            }
+        }
+
+        /// <summary>
         /// 记录致命信息到日志。
         /// </summary>
         /// <param name="message">要记录的信息。</param>
@@ -97,6 +151,19 @@ namespace Fireasy.Common.Logging
             if (LogEnvironment.IsConfigured(LogLevel.Fatal))
             {
                 Write("fatal", message, exception);
+            }
+        }
+
+        /// <summary>
+        /// 异步的，记录致命信息到日志。
+        /// </summary>
+        /// <param name="message">要记录的信息。</param>
+        /// <param name="exception">异常对象。</param>
+        public async Task FatalAsync(object message, Exception exception = null, CancellationToken cancellationToken = default)
+        {
+            if (LogEnvironment.IsConfigured(LogLevel.Fatal))
+            {
+                await WriteAsync("fatal", message, exception, cancellationToken);
             }
         }
 
@@ -119,66 +186,101 @@ namespace Fireasy.Common.Logging
         /// <param name="exception">应用程序异常。</param>
         private void Write(string logType, object message, Exception exception)
         {
+            var content = GetLogContent(message, exception);
+            var fileName = CreateLogFileName(logType);
+
             locker.LockWrite(() =>
-            {
-                var fileName = CreateLogFileName(logType);
-                using (var writer = new StreamWriter(fileName, true, Encoding.GetEncoding(0)))
                 {
-                    writer.WriteLine("Time: " + DateTime.Now);
-                    writer.WriteLine();
-                    if (message != null)
+                    using (var writer = new StreamWriter(fileName, true, Encoding.Default))
                     {
-                        writer.WriteLine(message);
+                        writer.WriteLine(content);
+                        writer.Flush();
                     }
-
-                    writer.WriteLine();
-
-                    if (exception != null)
-                    {
-                        writer.WriteLine("--Exceptions--");
-
-#if !NET35
-                        var aggExp = exception as AggregateException;
-                        if (aggExp != null && aggExp.InnerExceptions.Count > 0)
-                        {
-                            foreach (var e in aggExp.InnerExceptions)
-                            {
-                                WriteException(writer, e);
-                            }
-                        }
-                        else
-                        {
-                            WriteException(writer, exception);
-                        }
-#else
-                    WriteException(writer, exception);
-#endif
-                    }
-
-                    writer.WriteLine("*****************************************************************");
-                    writer.Flush();
-                }
-            });
+                });
         }
 
-        private static void WriteException(StreamWriter writer, Exception exception)
+        /// <summary>
+        /// 异步的，将抛出的异常写入到日志记录器。
+        /// </summary>
+        /// <param name="logType">信息类别。</param>
+        /// <param name="message">异常的说明信息。</param>
+        /// <param name="exception">应用程序异常。</param>
+        private async Task WriteAsync(string logType, object message, Exception exception, CancellationToken cancellationToken = default)
         {
-            var e = exception;
+            var content = GetLogContent(message, exception);
+            var fileName = CreateLogFileName(logType);
+
+            using (var locker = await asyncLocker.LockAsync())
+            using (var writer = new StreamWriter(fileName, true, Encoding.Default))
+            {
+#if NETSTANDARD && !NETSTANDARD2_0
+                    await writer.WriteLineAsync(content.AsMemory(), cancellationToken);
+#else
+                await writer.WriteLineAsync(content);
+#endif
+                await writer.FlushAsync();
+            }
+        }
+
+        private string GetLogContent(object message, Exception exception)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("Time: " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss fff"));
+            sb.AppendLine();
+            if (message != null)
+            {
+                sb.AppendLine(message.ToString());
+            }
+
+            sb.AppendLine();
+
+            if (exception != null)
+            {
+                sb.AppendLine("--Exceptions--");
+
+                if (exception is AggregateException aggExp)
+                {
+                    foreach (var e in aggExp.InnerExceptions)
+                    {
+                        RecursiveWriteException(sb, e);
+                    }
+                }
+                else if (exception is ReflectionTypeLoadException loadExp)
+                {
+                    foreach (var e in loadExp.LoaderExceptions)
+                    {
+                        RecursiveWriteException(sb, e);
+                    }
+                }
+                else
+                {
+                    RecursiveWriteException(sb, exception);
+                }
+            }
+
+            sb.AppendLine("*****************************************************************");
+
+            return sb.ToString();
+        }
+
+        private static void RecursiveWriteException(StringBuilder builder, Exception exception)
+        {
+            var curExp = exception;
             var ident = 0;
-            while (e != null)
+            while (curExp != null)
             {
                 var prefix = new string(' ', (ident++) * 2);
-                writer.WriteLine(prefix + e.GetType().Name + " => " + e.Message);
+                builder.AppendLine(string.Concat(prefix, curExp.GetType().Name, " => ", curExp.Message));
 
-                if (e.StackTrace != null)
+                if (curExp.StackTrace != null)
                 {
-                    writer.WriteLine();
-                    writer.WriteLine("----Begin StackTrack----");
-                    writer.WriteLine(e.StackTrace);
-                    writer.WriteLine("----End StackTrack----");
+                    builder.AppendLine();
+                    builder.AppendLine(string.Concat(prefix, "----Begin StackTrack----"));
+                    builder.AppendLine(string.Concat(prefix, curExp.StackTrace));
+                    builder.AppendLine(string.Concat(prefix, "----End StackTrack----"));
                 }
 
-                e = e.InnerException;
+                curExp = curExp.InnerException;
             }
         }
     }

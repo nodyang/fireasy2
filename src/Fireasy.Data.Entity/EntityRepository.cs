@@ -14,11 +14,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Fireasy.Data.Entity.Validation;
-
-#if !NET40 && !NET35
 using System.Threading.Tasks;
-#endif
 using Fireasy.Common.Extensions;
+using System.Threading;
 
 namespace Fireasy.Data.Entity
 {
@@ -34,7 +32,7 @@ namespace Fireasy.Data.Entity
         /// <summary>
         /// 初始化 <see cref="EntityRepository{TEntity}"/> 类的新实例。
         /// </summary>
-        /// <param name="context"></param>
+        /// <param name="repositoryProxy"></param>
         /// <param name="options"></param>
         public EntityRepository(IRepositoryProvider<TEntity> repositoryProxy, EntityContextOptions options)
         {
@@ -56,6 +54,7 @@ namespace Fireasy.Data.Entity
             get { return repositoryProxy.QueryProvider; }
         }
 
+        #region Get
         /// <summary>
         /// 通过一组主键值返回一个实体对象。
         /// </summary>
@@ -63,42 +62,71 @@ namespace Fireasy.Data.Entity
         /// <returns></returns>
         public TEntity Get(params PropertyValue[] primaryValues)
         {
-            return repositoryProxy.Get(primaryValues);
+            return GetAsync(primaryValues).Result;
         }
 
+        /// <summary>
+        /// 异步的，通过一组主键值返回一个实体对象。
+        /// </summary>
+        /// <param name="primaryValues">一组主键值。</param>
+        /// <returns></returns>
+        public async Task<TEntity> GetAsync(params PropertyValue[] primaryValues)
+        {
+            return await repositoryProxy.GetAsync(primaryValues);
+        }
+        #endregion
+
+        #region Insert
         /// <summary>
         /// 将一个新的实体对象创建到库。
         /// </summary>
         /// <param name="entity">要创建的实体对象。</param>
-        /// <returns>影响的实体数。</returns>
+        /// <returns>如果主键是自增类型，则为主键值，否则为影响的实体数。</returns>
         public int Insert(TEntity entity)
+        {
+            return InsertAsync(entity).Result;
+        }
+
+        /// <summary>
+        /// 异步的，将一个新的实体对象创建到库。
+        /// </summary>
+        /// <param name="entity">要创建的实体对象。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        /// <returns>如果主键是自增类型，则为主键值，否则为影响的实体数。</returns>
+        public async Task<int> InsertAsync(TEntity entity, CancellationToken cancellationToken = default)
         {
             Guard.ArgumentNull(entity, nameof(entity));
 
-            if (options.ValidateEntity)
-            {
-                ValidationUnity.Validate(entity);
-            }
-
-            int func() => repositoryProxy.Insert(entity);
-
-            return options.NotifyEvents ?
-                EntityPersistentSubscribeManager.OnCreate(entity, func) : func();
+            return await EntityPersistentSubscribeManager.OnCreateAsync(options.NotifyEvents, entity,
+                () => repositoryProxy.InsertAsync(HandleValidate(entity), cancellationToken));
         }
 
         /// <summary>
         /// 使用一个 <see cref="MemberInitExpression"/> 表达式插入新的对象。
         /// </summary>
         /// <param name="factory">一个构造实例并成员绑定的表达式。</param>
-        /// <returns></returns>
+        /// <returns>如果主键是自增类型，则为主键值，否则为影响的实体数。</returns>
         public int Insert(Expression<Func<TEntity>> factory)
+        {
+            return InsertAsync(factory).Result;
+        }
+
+        /// <summary>
+        /// 异步的，使用一个 <see cref="MemberInitExpression"/> 表达式插入新的对象。
+        /// </summary>
+        /// <param name="factory">一个构造实例并成员绑定的表达式。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        /// <returns>如果主键是自增类型，则为主键值，否则为影响的实体数。</returns>
+        public async Task<int> InsertAsync(Expression<Func<TEntity>> factory, CancellationToken cancellationToken = default)
         {
             var entity = EntityProxyManager.GetType(typeof(TEntity)).New<TEntity>();
             entity.InitByExpression(factory);
 
-            return Insert(entity);
+            return await InsertAsync(entity, cancellationToken);
         }
+        #endregion
 
+        #region BatchInsert
         /// <summary>
         /// 批量将一组实体对象插入到库中。
         /// </summary>
@@ -107,11 +135,26 @@ namespace Fireasy.Data.Entity
         /// <param name="completePercentage">已完成百分比的通知方法。</param>
         public void BatchInsert(IEnumerable<TEntity> entities, int batchSize = 1000, Action<int> completePercentage = null)
         {
-            Guard.ArgumentNull(entities, nameof(entities));
-
-            repositoryProxy.BatchInsert(entities, batchSize, completePercentage);
+            BatchInsertAsync(entities, batchSize, completePercentage);
         }
 
+        /// <summary>
+        /// 异步的，批量将一组实体对象插入到库中。
+        /// </summary>
+        /// <param name="entities">一组要插入实体对象。</param>
+        /// <param name="batchSize">每一个批次插入的实体数量。默认为 1000。</param>
+        /// <param name="completePercentage">已完成百分比的通知方法。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        public async Task BatchInsertAsync(IEnumerable<TEntity> entities, int batchSize = 1000, Action<int> completePercentage = null, CancellationToken cancellationToken = default)
+        {
+            Guard.ArgumentNull(entities, nameof(entities));
+
+            await repositoryProxy.BatchInsertAsync(entities, batchSize, completePercentage, cancellationToken);
+        }
+
+        #endregion
+
+        #region InsertOrUpdate
         /// <summary>
         /// 根据实体的状态，插入或更新实体对象。
         /// </summary>
@@ -119,23 +162,35 @@ namespace Fireasy.Data.Entity
         /// <returns>影响的实体数。</returns>
         public int InsertOrUpdate(TEntity entity)
         {
-            Guard.ArgumentNull(entity, nameof(entity));
-
-            if (options.NotifyEvents)
-            {
-                if (entity.EntityState == EntityState.Attached)
-                {
-                    return EntityPersistentSubscribeManager.OnCreate(entity, () => repositoryProxy.Insert(entity));
-                }
-                else
-                {
-                    return EntityPersistentSubscribeManager.OnUpdate(entity, () => repositoryProxy.Update(entity));
-                }
-            }
-
-            return entity.EntityState == EntityState.Attached ? repositoryProxy.Insert(entity) : repositoryProxy.Update(entity);
+            return InsertOrUpdateAsync(entity).Result;
         }
 
+        /// <summary>
+        /// 异步的，根据实体的状态，插入或更新实体对象。
+        /// </summary>
+        /// <param name="entity">要保存的实体对象。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        /// <returns>影响的实体数。</returns>
+        public async Task<int> InsertOrUpdateAsync(TEntity entity, CancellationToken cancellationToken = default)
+        {
+            Guard.ArgumentNull(entity, nameof(entity));
+
+            var properties = PropertyUnity.GetPrimaryProperties(typeof(TEntity));
+            var isNew = entity.EntityState == EntityState.Attached;
+
+            if (isNew && properties.Any(s => !PropertyValue.IsEmptyOrDefault(entity.GetValue(s))))
+            {
+                var parExp = Expression.Parameter(typeof(TEntity), "s");
+                var equalExp = properties.Select(s => Expression.Equal(Expression.MakeMemberAccess(parExp, s.Info.ReflectionInfo), Expression.Constant(entity.GetValue(s)))).Aggregate(Expression.And);
+                var lambdaExp = Expression.Lambda<Func<TEntity, bool>>(equalExp, parExp);
+                isNew = !this.Any(lambdaExp);
+            }
+
+            return await (isNew ? InsertAsync(entity, cancellationToken) : UpdateAsync(entity, cancellationToken));
+        }
+        #endregion
+
+        #region Delete
         /// <summary>
         /// 将指定的实体对象从库中移除。
         /// </summary>
@@ -146,10 +201,23 @@ namespace Fireasy.Data.Entity
         {
             Guard.ArgumentNull(entity, nameof(entity));
 
-            int func() => repositoryProxy.Delete(entity, logicalDelete);
+            return EntityPersistentSubscribeManager.OnRemove(options.NotifyEvents, entity,
+                () => repositoryProxy.DeleteAsync(entity, logicalDelete).Result);
+        }
 
-            return options.NotifyEvents ?
-                EntityPersistentSubscribeManager.OnRemove(entity, func) : func();
+        /// <summary>
+        /// 异步的，将指定的实体对象从库中移除。
+        /// </summary>
+        /// <param name="entity">要移除的实体对象。</param>
+        /// <param name="logicalDelete">是否为逻辑删除。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        /// <returns>影响的实体数。</returns>
+        public async Task<int> DeleteAsync(TEntity entity, bool logicalDelete = true, CancellationToken cancellationToken = default)
+        {
+            Guard.ArgumentNull(entity, nameof(entity));
+
+            return await EntityPersistentSubscribeManager.OnRemoveAsync(options.NotifyEvents, entity,
+                () => repositoryProxy.DeleteAsync(entity, logicalDelete, cancellationToken));
         }
 
         /// <summary>
@@ -159,7 +227,17 @@ namespace Fireasy.Data.Entity
         /// <returns>影响的实体数。</returns>
         public int Delete(params PropertyValue[] primaryValues)
         {
-            var ret = repositoryProxy.Delete(primaryValues, true);
+            return DeleteAsync(primaryValues).Result;
+        }
+
+        /// <summary>
+        /// 异步的，根据主键值将对象从库中移除。
+        /// </summary>
+        /// <param name="primaryValues">一组主键值。</param>
+        /// <returns>影响的实体数。</returns>
+        public async Task<int> DeleteAsync(params PropertyValue[] primaryValues)
+        {
+            var ret = await repositoryProxy.DeleteAsync(primaryValues, default);
             if (ret > 0 && options.NotifyEvents)
             {
                 EntityPersistentSubscribeManager.Publish<TEntity>(EntityPersistentEventType.AfterRemove);
@@ -176,24 +254,19 @@ namespace Fireasy.Data.Entity
         /// <returns>影响的实体数。</returns>
         public int Delete(PropertyValue[] primaryValues, bool logicalDelete = true)
         {
-            var ret = repositoryProxy.Delete(primaryValues, logicalDelete);
-            if (ret > 0 && options.NotifyEvents)
-            {
-                EntityPersistentSubscribeManager.Publish<TEntity>(EntityPersistentEventType.AfterRemove);
-            }
-
-            return ret;
+            return DeleteAsync(primaryValues, logicalDelete).Result;
         }
 
         /// <summary>
-        /// 根据主键值将对象从库中移除。
+        /// 异步的，根据主键值将对象从库中移除。
         /// </summary>
         /// <param name="primaryValues">一组主键值。</param>
         /// <param name="logicalDelete">是否为逻辑删除。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
         /// <returns>影响的实体数。</returns>
-        public int Delete(object[] primaryValues, bool logicalDelete = true)
+        public async Task<int> DeleteAsync(PropertyValue[] primaryValues, bool logicalDelete = true, CancellationToken cancellationToken = default)
         {
-            var ret = repositoryProxy.Delete(primaryValues, logicalDelete);
+            var ret = await repositoryProxy.DeleteAsync(primaryValues, logicalDelete);
             if (ret > 0 && options.NotifyEvents)
             {
                 EntityPersistentSubscribeManager.Publish<TEntity>(EntityPersistentEventType.AfterRemove);
@@ -210,7 +283,19 @@ namespace Fireasy.Data.Entity
         /// <returns>影响的实体数。</returns>
         public int Delete(Expression<Func<TEntity, bool>> predicate, bool logicalDelete = true)
         {
-            var ret = repositoryProxy.Delete(predicate, logicalDelete);
+            return DeleteAsync(predicate, logicalDelete).Result;
+        }
+
+        /// <summary>
+        /// 异步的，将满足条件的一组对象从库中移除。
+        /// </summary>
+        /// <param name="predicate">用于测试每个元素是否满足条件的函数。</param>
+        /// <param name="logicalDelete">是否为逻辑删除</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        /// <returns>影响的实体数。</returns>
+        public async Task<int> DeleteAsync(Expression<Func<TEntity, bool>> predicate, bool logicalDelete = true, CancellationToken cancellationToken = default)
+        {
+            var ret = await repositoryProxy.DeleteAsync(predicate, logicalDelete);
             if (ret > 0 && options.NotifyEvents)
             {
                 EntityPersistentSubscribeManager.Publish<TEntity>(EntityPersistentEventType.AfterRemove);
@@ -219,6 +304,9 @@ namespace Fireasy.Data.Entity
             return ret;
         }
 
+        #endregion
+
+        #region Update
         /// <summary>
         /// 更新一个实体对象。
         /// </summary>
@@ -226,17 +314,21 @@ namespace Fireasy.Data.Entity
         /// <returns>影响的实体数。</returns>
         public int Update(TEntity entity)
         {
+            return UpdateAsync(entity).Result;
+        }
+
+        /// <summary>
+        /// 异步的，更新一个实体对象。
+        /// </summary>
+        /// <param name="entity">实体对象。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        /// <returns>影响的实体数。</returns>
+        public async Task<int> UpdateAsync(TEntity entity, CancellationToken cancellationToken = default)
+        {
             Guard.ArgumentNull(entity, nameof(entity));
 
-            if (options.ValidateEntity)
-            {
-                ValidationUnity.Validate(entity);
-            }
-
-            int func() => repositoryProxy.Update(entity);
-
-            return options.NotifyEvents ?
-                EntityPersistentSubscribeManager.OnUpdate(entity, func) : func();
+            return await EntityPersistentSubscribeManager.OnUpdateAsync(options.NotifyEvents, entity,
+                () => repositoryProxy.UpdateAsync(HandleValidate(entity), cancellationToken));
         }
 
         /// <summary>
@@ -247,7 +339,19 @@ namespace Fireasy.Data.Entity
         /// <returns>影响的实体数。</returns>
         public int Update(TEntity entity, Expression<Func<TEntity, bool>> predicate)
         {
-            var ret = repositoryProxy.Update(entity, predicate);
+            return UpdateAsync(entity, predicate).Result;
+        }
+
+        /// <summary>
+        /// 异步的，使用一个参照的实体对象更新满足条件的一序列对象。
+        /// </summary>
+        /// <param name="entity">更新的参考对象。</param>
+        /// <param name="predicate">用于测试每个元素是否满足条件的函数。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        /// <returns>影响的实体数。</returns>
+        public async Task<int> UpdateAsync(TEntity entity, Expression<Func<TEntity, bool>> predicate, CancellationToken cancellationToken = default)
+        {
+            var ret = await repositoryProxy.UpdateAsync(entity, predicate);
             if (ret > 0 && options.NotifyEvents)
             {
                 EntityPersistentSubscribeManager.Publish<TEntity>(EntityPersistentEventType.AfterUpdate);
@@ -264,10 +368,22 @@ namespace Fireasy.Data.Entity
         /// <returns>影响的实体数。</returns>
         public int Update(Expression<Func<TEntity>> factory, Expression<Func<TEntity, bool>> predicate)
         {
+            return UpdateAsync(factory, predicate).Result;
+        }
+
+        /// <summary>
+        /// 异步的，使用一个 <see cref="MemberInitExpression"/> 表达式更新满足条件的一序列对象。
+        /// </summary>
+        /// <param name="factory">一个构造实例并成员绑定的表达式。</param>
+        /// <param name="predicate">用于测试每个元素是否满足条件的函数。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        /// <returns>影响的实体数。</returns>
+        public async Task<int> UpdateAsync(Expression<Func<TEntity>> factory, Expression<Func<TEntity, bool>> predicate, CancellationToken cancellationToken = default)
+        {
             var entity = EntityProxyManager.GetType(typeof(TEntity)).New<TEntity>();
             entity.InitByExpression(factory);
 
-            return predicate == null ? Update(entity) : Update(entity, predicate);
+            return predicate == null ? await UpdateAsync(entity, cancellationToken) : await UpdateAsync(entity, predicate, cancellationToken);
         }
 
         /// <summary>
@@ -278,7 +394,19 @@ namespace Fireasy.Data.Entity
         /// <returns>影响的实体数。</returns>
         public int Update(Expression<Func<TEntity, TEntity>> calculator, Expression<Func<TEntity, bool>> predicate)
         {
-            var ret = repositoryProxy.Update(calculator, predicate);
+            return UpdateAsync(calculator, predicate).Result;
+        }
+
+        /// <summary>
+        /// 异步的，使用一个累加器更新满足条件的一序列对象。
+        /// </summary>
+        /// <param name="calculator">一个计算器表达式。</param>
+        /// <param name="predicate">用于测试每个元素是否满足条件的函数。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        /// <returns>影响的实体数。</returns>
+        public async Task<int> UpdateAsync(Expression<Func<TEntity, TEntity>> calculator, Expression<Func<TEntity, bool>> predicate, CancellationToken cancellationToken = default)
+        {
+            var ret = await repositoryProxy.UpdateAsync(calculator, predicate, cancellationToken);
             if (ret > 0 && options.NotifyEvents)
             {
                 EntityPersistentSubscribeManager.Publish<TEntity>(EntityPersistentEventType.AfterUpdate);
@@ -287,6 +415,9 @@ namespace Fireasy.Data.Entity
             return ret;
         }
 
+        #endregion
+
+        #region Batch
         /// <summary>
         /// 对实体集合进行批量操作。
         /// </summary>
@@ -294,6 +425,18 @@ namespace Fireasy.Data.Entity
         /// <param name="fnOperation">实体操作表达式，权提供 Insert、Update 和 Delete 操作。</param>
         /// <returns>影响的实体数。</returns>
         public int Batch(IEnumerable<TEntity> instances, Expression<Func<IRepository<TEntity>, TEntity, int>> fnOperation)
+        {
+            return BatchAsync(instances, fnOperation).Result;
+        }
+
+        /// <summary>
+        /// 异步的，对实体集合进行批量操作。
+        /// </summary>
+        /// <param name="instances">要操作的实体序列。</param>
+        /// <param name="fnOperation">实体操作表达式，权提供 Insert、Update 和 Delete 操作。</param>
+        /// <param name="cancellationToken">取消操作的通知。</param>
+        /// <returns>影响的实体数。</returns>
+        public async Task<int> BatchAsync(IEnumerable<TEntity> instances, Expression<Func<IRepository<TEntity>, TEntity, int>> fnOperation, CancellationToken cancellationToken = default)
         {
             if (instances.IsNullOrEmpty())
             {
@@ -303,163 +446,10 @@ namespace Fireasy.Data.Entity
             var operateName = OperateFinder.Find(fnOperation);
             var eventType = GetBeforeEventType(operateName);
 
-            int func() => repositoryProxy.Batch(instances, fnOperation);
+            return await EntityPersistentSubscribeManager.OnBatchAsync(options.NotifyEvents, instances.Cast<IEntity>(), eventType, () => repositoryProxy.BatchAsync(instances, fnOperation, cancellationToken));
 
-            return options.NotifyEvents ?
-                EntityPersistentSubscribeManager.OnBatch(instances.Cast<IEntity>(), eventType, func) :
-                func();
         }
-
-#if !NET40 && !NET35
-        /// <summary>
-        /// 将一个新的实体对象创建到库。
-        /// </summary>
-        /// <param name="entity">要创建的实体对象。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> InsertAsync(TEntity entity)
-        {
-            return await Task.Run(() => Insert(entity));
-        }
-
-        /// <summary>
-        /// 使用一个 <see cref="MemberInitExpression"/> 表达式插入新的对象。
-        /// </summary>
-        /// <param name="factory">一个构造实例并成员绑定的表达式。</param>
-        /// <returns></returns>
-        public async Task<int> InsertAsync(Expression<Func<TEntity>> factory)
-        {
-            return await Task.Run(() => Insert(factory));
-        }
-
-        /// <summary>
-        /// 批量将一组实体对象插入到库中。
-        /// </summary>
-        /// <param name="entities">一组要插入实体对象。</param>
-        /// <param name="batchSize">每一个批次插入的实体数量。默认为 1000。</param>
-        /// <param name="completePercentage">已完成百分比的通知方法。</param>
-        public async Task BatchInsertAsync(IEnumerable<TEntity> entities, int batchSize = 1000, Action<int> completePercentage = null)
-        {
-            await Task.Run(() => BatchInsert(entities, batchSize, completePercentage));
-        }
-
-        /// <summary>
-        /// 根据实体的状态，插入或更新实体对象。
-        /// </summary>
-        /// <param name="entity">要保存的实体对象。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> InsertOrUpdateAsync(TEntity entity)
-        {
-            return await Task.Run(() => InsertOrUpdate(entity));
-        }
-
-        /// <summary>
-        /// 将指定的实体对象从库中移除。
-        /// </summary>
-        /// <param name="entity">要移除的实体对象。</param>
-        /// <param name="logicalDelete">是否为逻辑删除。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> DeleteAsync(TEntity entity, bool logicalDelete = true)
-        {
-            return await Task.Run(() => Delete(entity, logicalDelete));
-        }
-
-        /// <summary>
-        /// 根据主键值将对象从库中移除。
-        /// </summary>
-        /// <param name="primaryValues">一组主键值。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> DeleteAsync(params PropertyValue[] primaryValues)
-        {
-            return await Task.Run(() => Delete(primaryValues, true));
-        }
-
-        /// <summary>
-        /// 根据主键值将对象从库中移除。
-        /// </summary>
-        /// <param name="primaryValues">一组主键值。</param>
-        /// <param name="logicalDelete">是否为逻辑删除。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> DeleteAsync(PropertyValue[] primaryValues, bool logicalDelete = true)
-        {
-            return await Task.Run(() => Delete(primaryValues, logicalDelete));
-        }
-
-        /// <summary>
-        /// 根据主键值将对象从库中移除。
-        /// </summary>
-        /// <param name="primaryValues">一组主键值。</param>
-        /// <param name="logicalDelete">是否为逻辑删除。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> DeleteAsync(object[] primaryValues, bool logicalDelete = true)
-        {
-            return await Task.Run(() => Delete(primaryValues, logicalDelete));
-        }
-
-        /// <summary>
-        /// 将满足条件的一组对象从库中移除。
-        /// </summary>
-        /// <param name="predicate">用于测试每个元素是否满足条件的函数。</param>
-        /// <param name="logicalDelete">是否为逻辑删除</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> DeleteAsync(Expression<Func<TEntity, bool>> predicate, bool logicalDelete = true)
-        {
-            return await Task.Run(() => Delete(predicate, logicalDelete));
-        }
-
-        /// <summary>
-        /// 更新一个实体对象。
-        /// </summary>
-        /// <param name="entity">实体对象。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> UpdateAsync(TEntity entity)
-        {
-            return await Task.Run(() => Update(entity));
-        }
-
-        /// <summary>
-        /// 使用一个参照的实体对象更新满足条件的一序列对象。
-        /// </summary>
-        /// <param name="entity">更新的参考对象。</param>
-        /// <param name="predicate">用于测试每个元素是否满足条件的函数。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> UpdateAsync(TEntity entity, Expression<Func<TEntity, bool>> predicate)
-        {
-            return await Task.Run(() => Update(entity, predicate));
-        }
-
-        /// <summary>
-        /// 使用一个 <see cref="MemberInitExpression"/> 表达式更新满足条件的一序列对象。
-        /// </summary>
-        /// <param name="factory">一个构造实例并成员绑定的表达式。</param>
-        /// <param name="predicate">用于测试每个元素是否满足条件的函数。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> UpdateAsync(Expression<Func<TEntity>> factory, Expression<Func<TEntity, bool>> predicate)
-        {
-            return await Task.Run(() => Update(factory, predicate));
-        }
-
-        /// <summary>
-        /// 使用一个累加器更新满足条件的一序列对象。
-        /// </summary>
-        /// <param name="calculator">一个计算器表达式。</param>
-        /// <param name="predicate">用于测试每个元素是否满足条件的函数。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> UpdateAsync(Expression<Func<TEntity, TEntity>> calculator, Expression<Func<TEntity, bool>> predicate)
-        {
-            return await Task.Run(() => Update(calculator, predicate));
-        }
-
-        /// <summary>
-        /// 对实体集合进行批量操作。
-        /// </summary>
-        /// <param name="instances">要操作的实体序列。</param>
-        /// <param name="fnOperation">实体操作表达式，权提供 Insert、Update 和 Delete 操作。</param>
-        /// <returns>影响的实体数。</returns>
-        public async Task<int> BatchAsync(IEnumerable<TEntity> instances, Expression<Func<IRepository<TEntity>, TEntity, int>> fnOperation)
-        {
-            return await Task.Run(() => Batch(instances, fnOperation));
-        }
-#endif
+        #endregion
 
         /// <summary>
         /// 指定要包括在查询结果中的关联对象。
@@ -494,6 +484,7 @@ namespace Fireasy.Data.Entity
             return this;
         }
 
+        #region IRepository实现
         /// <summary>
         /// 通过一组主键值返回一个对象。
         /// </summary>
@@ -556,15 +547,34 @@ namespace Fireasy.Data.Entity
             return Delete((Expression<Func<TEntity, bool>>)predicate, logicalDelete);
         }
 
-#if !NET40 && !NET35
+        /// <summary>
+        /// 通过一组主键值返回一个对象。
+        /// </summary>
+        /// <param name="primaryValues">一组主键值。</param>
+        /// <returns></returns>
+        async Task<IEntity> IRepository.GetAsync(params PropertyValue[] primaryValues)
+        {
+            return await GetAsync(primaryValues);
+        }
+
+        /// <summary>
+        /// 通过一组主键值返回一个对象。
+        /// </summary>
+        /// <param name="primaryValues">一组主键值。</param>
+        /// <returns></returns>
+        async Task<TEntity> IRepository<TEntity>.GetAsync(params PropertyValue[] primaryValues)
+        {
+            return await GetAsync(primaryValues);
+        }
+
         /// <summary>
         /// 将一个新的对象插入到库。
         /// </summary>
         /// <param name="entity">要创建的对象。</param>
         /// <returns>影响的实体数。</returns>
-        async Task<int> IRepository.InsertAsync(IEntity entity)
+        async Task<int> IRepository.InsertAsync(IEntity entity, CancellationToken cancellationToken)
         {
-            return await InsertAsync((TEntity)entity);
+            return await InsertAsync((TEntity)entity, cancellationToken);
         }
 
         /// <summary>
@@ -572,9 +582,9 @@ namespace Fireasy.Data.Entity
         /// </summary>
         /// <param name="entity">要更新的对象。</param>
         /// <returns>影响的实体数。</returns>
-        async Task<int> IRepository.UpdateAsync(IEntity entity)
+        async Task<int> IRepository.UpdateAsync(IEntity entity, CancellationToken cancellationToken)
         {
-            return await UpdateAsync((TEntity)entity);
+            return await UpdateAsync((TEntity)entity, cancellationToken);
         }
 
         /// <summary>
@@ -582,20 +592,9 @@ namespace Fireasy.Data.Entity
         /// </summary>
         /// <param name="entity">要保存的对象。</param>
         /// <returns>影响的实体数。</returns>
-        async Task<int> IRepository.InsertOrUpdateAsync(IEntity entity)
+        async Task<int> IRepository.InsertOrUpdateAsync(IEntity entity, CancellationToken cancellationToken)
         {
-            return await InsertOrUpdateAsync((TEntity)entity);
-        }
-
-        /// <summary>
-        /// 将指定的对象从库中删除。
-        /// </summary>
-        /// <param name="entity">要移除的对象。</param>
-        /// <param name="logicalDelete">是否为逻辑删除。</param>
-        /// <returns>影响的实体数。</returns>
-        async Task<int> IRepository.DeleteAsync(IEntity entity, bool logicalDelete)
-        {
-            return await DeleteAsync((TEntity)entity, logicalDelete);
+            return await InsertOrUpdateAsync((TEntity)entity, cancellationToken);
         }
 
         /// <summary>
@@ -604,11 +603,22 @@ namespace Fireasy.Data.Entity
         /// <param name="predicate">用于测试每个元素是否满足条件的函数。</param>
         /// <param name="logicalDelete">是否为逻辑删除</param>
         /// <returns>影响的实体数。</returns>
-        async Task<int> IRepository.DeleteAsync(Expression predicate, bool logicalDelete)
+        async Task<int> IRepository.DeleteAsync(Expression predicate, bool logicalDelete, CancellationToken cancellationToken)
         {
-            return await DeleteAsync((Expression<Func<TEntity, bool>>)predicate, logicalDelete);
+            return await DeleteAsync((Expression<Func<TEntity, bool>>)predicate, logicalDelete, cancellationToken);
         }
-#endif
+
+        /// <summary>
+        /// 将指定的对象从库中删除。
+        /// </summary>
+        /// <param name="entity">要移除的对象。</param>
+        /// <param name="logicalDelete">是否为逻辑删除。</param>
+        /// <returns>影响的实体数。</returns>
+        async Task<int> IRepository.DeleteAsync(IEntity entity, bool logicalDelete, CancellationToken cancellationToken)
+        {
+            return await DeleteAsync((TEntity)entity, logicalDelete, cancellationToken);
+        }
+        #endregion
 
         private IEntity GetCloneEntity(IEntity entity)
         {
@@ -616,6 +626,16 @@ namespace Fireasy.Data.Entity
             if (kp != null)
             {
                 return (IEntity)kp.Clone();
+            }
+
+            return entity;
+        }
+
+        private TEntity HandleValidate(TEntity entity)
+        {
+            if (options.ValidateEntity)
+            {
+                ValidationUnity.Validate(entity);
             }
 
             return entity;

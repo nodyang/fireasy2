@@ -176,27 +176,6 @@ namespace Fireasy.Data.Entity
         }
 
         /// <summary>
-        /// 获取实体的根实体类型。
-        /// </summary>
-        /// <param name="entityType"></param>
-        /// <returns></returns>
-        public static Type GetRootType(this Type entityType)
-        {
-            while (true)
-            {
-                if (!entityType.BaseType.IsDefined<EntityMappingAttribute>() ||
-                    !entityType.BaseType.IsDirectImplementInterface(typeof(IEntity)))
-                {
-                    break;
-                }
-
-                entityType = entityType.BaseType;
-            }
-
-            return entityType;
-        }
-
-        /// <summary>
         /// 获取定义的实体类型。
         /// </summary>
         /// <param name="entityType"></param>
@@ -204,6 +183,38 @@ namespace Fireasy.Data.Entity
         public static Type GetDefinitionEntityType(this Type entityType)
         {
             if (typeof(ICompiledEntity).IsAssignableFrom(entityType))
+            {
+                entityType = entityType.BaseType;
+            }
+
+            return entityType;
+        }
+
+        /// <summary>
+        /// 获取实体的根实体类型。
+        /// </summary>
+        /// <param name="entityType"></param>
+        /// <returns></returns>
+        public static Type GetRootEntityType(this Type entityType)
+        {
+            while (entityType.BaseType != null && !entityType.BaseType.IsAbstract &&
+                !entityType.GetCustomAttributes<EntityMappingAttribute>().Any())
+            {
+                entityType = entityType.BaseType;
+            }
+
+            return entityType;
+        }
+
+        /// <summary>
+        /// 获取实体的映射的实体类型。
+        /// </summary>
+        /// <param name="entityType"></param>
+        /// <returns></returns>
+        public static Type GetMapEntityType(this Type entityType)
+        {
+            while (entityType.BaseType != null && !entityType.BaseType.IsAbstract &&
+                !entityType.GetCustomAttributes<EntityMappingAttribute>().Any())
             {
                 entityType = entityType.BaseType;
             }
@@ -279,6 +290,24 @@ namespace Fireasy.Data.Entity
         }
 
         /// <summary>
+        /// 为实体对象应用默认值。
+        /// </summary>
+        /// <param name="entity"></param>
+        /// <returns></returns>
+        public static IEntity ApplyDefaultValue(this IEntity entity)
+        {
+            foreach (var property in PropertyUnity.GetPersistentProperties(entity.EntityType))
+            {
+                if (!PropertyValue.IsEmpty(property.Info.DefaultValue))
+                {
+                    entity.InitializeValue(property, property.Info.DefaultValue);
+                }
+            }
+
+            return entity;
+        }
+
+        /// <summary>
         /// 如果对象实现了 <see cref="IEntityPersistentInstanceContainer"/> 接口，则会将 <paramref name="instanceName"/> 附加到该对象。
         /// </summary>
         /// <param name="item"></param>
@@ -317,6 +346,16 @@ namespace Fireasy.Data.Entity
                 });
 
             return item;
+        }
+
+        /// <summary>
+        /// 判断实体是否实现了 <see cref="IEntity"/>。
+        /// </summary>
+        /// <param name="entityType"></param>
+        /// <returns></returns>
+        internal static bool IsEntityType(this Type entityType)
+        {
+            return typeof(IEntity).IsAssignableFrom(entityType);
         }
 
         /// <summary>

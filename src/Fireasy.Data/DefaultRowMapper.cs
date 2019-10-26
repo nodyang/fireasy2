@@ -95,17 +95,13 @@ namespace Fireasy.Data
                     var convertMT = convertMethod.MakeGenericMethod(dbType, s.Info.PropertyType);
 
                     var expression = (Expression)Expression.Call(rowMapExp, getValueMethod, new Expression[] { parExp, Expression.Constant(s.Index) });
-                    var convertExp = Expression.Convert(
-                        Expression.Call(convertMT, new Expression[] { 
-                            expression
-                        }), 
-                        s.Info.PropertyType);
+                    var convertExp = Expression.Call(convertMT, new Expression[] { expression });
 
                     if (s.Info.PropertyType.IsNullableType())
                     {
                         expression = Expression.Condition(
-                        Expression.Call(parExp, isNullMethod, Expression.Constant(s.Index)),
-                        Expression.Convert(Expression.Constant(null), s.Info.PropertyType),
+                            Expression.Call(parExp, isNullMethod, Expression.Constant(s.Index, typeof(int))),
+                            Expression.Convert(Expression.Constant(null), s.Info.PropertyType),
                         convertExp);
                     }
                     else if (dbType != s.Info.PropertyType)
@@ -133,11 +129,7 @@ namespace Fireasy.Data
 
             var parExp = Expression.Parameter(typeof(DataRow), "s");
             var convertMethod = typeof(Extensions.DataExtension).GetMethod("ToTypeEx", BindingFlags.NonPublic | BindingFlags.Static);
-#if NET35
-            var itemGetMethod = typeof(DataRow).GetMethod("get_Item", new[] { typeof(int) });
-#else
             var itemProperty = typeof(DataRow).GetProperty("Item", new[] { typeof(int) });
-#endif
             var bindings =
                 mapping.Select(s => (MemberBinding)
                     Expression.Bind(
@@ -145,11 +137,7 @@ namespace Fireasy.Data
                         Expression.Convert(
                             Expression.Call(convertMethod, new Expression[] 
                                 { 
-#if NET35
-                                        Expression.Call(parExp, itemGetMethod, Expression.Constant(s.Index)),
-#else
-                                        Expression.MakeIndex(parExp, itemProperty, new List<Expression> { Expression.Constant(s.Index) }),
-#endif
+                                    Expression.MakeIndex(parExp, itemProperty, new List<Expression> { Expression.Constant(s.Index) }),
                                     Expression.Constant(s.Info.PropertyType),
                                     Expression.Constant(null)
                                 }

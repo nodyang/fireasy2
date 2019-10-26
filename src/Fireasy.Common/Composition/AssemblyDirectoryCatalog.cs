@@ -5,9 +5,8 @@
 //   (c) Copyright Fireasy. All rights reserved.
 // </copyright>
 // -----------------------------------------------------------------------
-#if !NET35
+using System;
 using System.ComponentModel.Composition.Hosting;
-using System.Reflection;
 
 namespace Fireasy.Common.Composition
 {
@@ -39,9 +38,9 @@ namespace Fireasy.Common.Composition
         /// <returns>工作目录。</returns>
         private static string GetWorkDirectory()
         {
-            var directory = System.IO.Path.GetDirectoryName(Assembly.GetExecutingAssembly().CodeBase);
+            var directory = AppDomain.CurrentDomain.BaseDirectory;
             if (!string.IsNullOrEmpty(directory) &&
-                directory.StartsWith("file:\\"))
+                (directory.StartsWith("file:\\")))
             {
                 directory = directory.Substring(6);
             }
@@ -50,4 +49,3 @@ namespace Fireasy.Common.Composition
         }
     }
 }
-#endif
